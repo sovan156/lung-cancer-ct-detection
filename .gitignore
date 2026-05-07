@@ -1,0 +1,10 @@
+dataset/
+uploads/
+reports/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.idea/
+Thumbs.db
+*.log
