@@ -1,53 +1,40 @@
 # predict.py
-# Makes predictions on uploaded CT scan images
+# Fixed version - correct prediction display
 
 import numpy as np
 import tensorflow as tf
 import joblib
 from preprocessing import preprocess_single_image
 
-# What each class means to doctors
+# Info for each class
 CLASS_INFO = {
     'normal': {
-        'display': '✅ NORMAL',
-        'color':   '#4caf50',
-        'risk':    'LOW RISK',
-        'action':  'Continue regular annual screenings',
-        'icon':    '✅',
+        'display':     '✅ NO CANCER DETECTED',
+        'color':       '#4caf50',
+        'risk':        'LOW RISK',
+        'action':      'Continue regular annual CT screenings',
+        'icon':        '✅',
         'description': (
             "No signs of lung cancer detected in this CT scan. "
-            "The lung tissue appears normal with no suspicious masses "
-            "or nodules. Regular annual CT screenings are still "
-            "recommended especially for high-risk individuals "
-            "(smokers, age above 50, family history)."
+            "The lung tissue appears normal with no suspicious "
+            "masses or nodules. Regular annual CT screenings are "
+            "still recommended, especially for high-risk individuals "
+            "such as smokers or those above age 50 with family history."
         )
     },
-    'benign': {
-        'display': '⚠️ BENIGN TUMOR',
-        'color':   '#ff9800',
-        'risk':    'MEDIUM RISK',
-        'action':  'Schedule follow-up with doctor within 30 days',
-        'icon':    '⚠️',
+    'cancer': {
+        'display':     '🔴 LUNG CANCER DETECTED',
+        'color':       '#f44336',
+        'risk':        'HIGH RISK',
+        'action':      'URGENT: Consult oncologist immediately',
+        'icon':        '🔴',
         'description': (
-            "A benign (non-cancerous) tumor or nodule has been "
-            "detected in this CT scan. Benign tumors do NOT spread "
-            "to other parts of the body. However, medical consultation "
-            "is strongly recommended for proper monitoring. "
-            "Follow-up CT scans may be advised every 3-6 months."
-        )
-    },
-    'malignant': {
-        'display': '🔴 MALIGNANT CANCER',
-        'color':   '#f44336',
-        'risk':    'HIGH RISK',
-        'action':  'URGENT: Consult oncologist immediately',
-        'icon':    '🔴',
-        'description': (
-            "Signs of malignant (cancerous) tissue detected in this "
-            "CT scan. Malignant tumors can spread to other parts of "
-            "the body if not treated. IMMEDIATE consultation with an "
-            "oncologist is strongly recommended. Early detection "
-            "significantly improves treatment outcomes and survival rates."
+            "Signs of lung cancer detected in this CT scan. "
+            "Cancerous tissue has been identified by the AI model. "
+            "IMMEDIATE consultation with an oncologist is strongly "
+            "recommended. Early detection and treatment significantly "
+            "improves survival rates. Additional tests such as "
+            "PET scan and biopsy may be required for confirmation."
         )
     }
 }
@@ -57,7 +44,7 @@ def load_model(model_path='model/best_model.h5'):
     """Load the trained model from disk"""
     try:
         model = tf.keras.models.load_model(model_path)
-        print(f"Model loaded successfully!")
+        print("Model loaded successfully!")
         return model
     except Exception as e:
         print(f"Error loading model: {e}")
@@ -65,7 +52,7 @@ def load_model(model_path='model/best_model.h5'):
 
 
 def load_model_info(info_path='model/model_info.pkl'):
-    """Load model information from disk"""
+    """Load model information"""
     try:
         info = joblib.load(info_path)
         return info
@@ -78,52 +65,51 @@ def predict_ct_scan(model, model_info, image_file):
     """
     Predict cancer from CT scan image
 
-    Steps:
-    1. Preprocess the image
-    2. Run through AI model
-    3. Get probabilities for each class
-    4. Return detailed result
-
-    Args:
-        model      : loaded Keras model
-        model_info : model metadata
-        image_file : uploaded file from Streamlit
-
-    Returns:
-        result       : dict with all prediction details
-        img_array    : processed image (for Grad-CAM)
-        original_img : original PIL image (for display)
+    FIXED VERSION:
+    - Correctly maps index to class name
+    - Confidence matches the predicted class
+    - No mismatch between result and charts
     """
-    # Step 1: Preprocess
+
+    # Step 1: Preprocess image
     img_array, original_img = preprocess_single_image(image_file)
 
-    # Step 2: Predict
-    # Returns array like [0.1, 0.2, 0.7] for 3 classes
-    predictions = model.predict(img_array, verbose=0)
-    probabilities = predictions[0]  # Remove batch dimension
+    # Step 2: Run model
+    # Returns array like [0.89, 0.10] for 2 classes
+    predictions   = model.predict(img_array, verbose=0)
+    probabilities = predictions[0]
 
-    # Step 3: Find which class has highest probability
-    predicted_idx = int(np.argmax(probabilities))
+    # Step 3: Print for debugging
+    print(f"\nRaw predictions: {probabilities}")
+    print(f"Class indices: {model_info['class_indices']}")
 
-    # Step 4: Convert index to class name
-    # class_indices looks like: {'benign': 0, 'malignant': 1, 'normal': 2}
-    idx_to_class = {
-        v: k for k, v in model_info['class_indices'].items()
-    }
-    predicted_class = idx_to_class[predicted_idx]
+    # Step 4: Get class mapping
+    # class_indices looks like: {'cancer': 0, 'normal': 1}
+    class_indices = model_info['class_indices']
 
-    # Confidence = probability of predicted class * 100
-    confidence = float(probabilities[predicted_idx]) * 100
-
-    # All class probabilities as percentages
+    # Step 5: Build probability dict with correct names
+    # {'cancer': 0.89, 'normal': 0.10}
     class_probabilities = {}
-    for idx, class_name in idx_to_class.items():
-        class_probabilities[class_name] = float(probabilities[idx]) * 100
+    for class_name, class_idx in class_indices.items():
+        class_probabilities[class_name] = float(probabilities[class_idx]) * 100
 
-    # Get class info
+    print(f"Class probabilities: {class_probabilities}")
+
+    # Step 6: Find which class has HIGHEST probability
+    # This is the predicted class
+    predicted_class = max(class_probabilities, key=class_probabilities.get)
+    confidence      = class_probabilities[predicted_class]
+
+    print(f"Predicted class: {predicted_class}")
+    print(f"Confidence: {confidence:.1f}%")
+
+    # Step 7: Get class index for Grad-CAM
+    predicted_idx = class_indices[predicted_class]
+
+    # Step 8: Get display info
     info = CLASS_INFO.get(predicted_class, CLASS_INFO['normal'])
 
-    # Build complete result dictionary
+    # Step 9: Build result
     result = {
         'predicted_class': predicted_class,
         'class':           predicted_class,
@@ -136,8 +122,8 @@ def predict_ct_scan(model, model_info, image_file):
         'action':          info['action'],
         'icon':            info['icon'],
         'description':     info['description'],
-        'is_cancer':       predicted_class == 'malignant',
-        'needs_attention': predicted_class in ['malignant', 'benign']
+        'is_cancer':       predicted_class == 'cancer',
+        'needs_attention': predicted_class == 'cancer'
     }
 
     return result, img_array, original_img
